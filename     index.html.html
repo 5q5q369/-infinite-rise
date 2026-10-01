@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b1020">
+<title>INFINITE RISE - インフレRPG</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b16;color:#f5f7ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button{font:inherit;color:inherit;border:0}
+#app{height:100%;display:flex;flex-direction:column;background:
+ radial-gradient(circle at 50% 15%,#263867 0,#10182c 35%,#070b16 75%)}
+header{padding:10px 12px 7px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.logo{font-weight:900;letter-spacing:.08em;font-size:17px}
+.gold{color:#ffd45a;font-weight:800}
+#stage{flex:1;min-height:0;position:relative;margin:0 10px;border:1px solid #33415f;border-radius:16px;overflow:hidden;background:#0b1020;box-shadow:0 12px 35px #0008}
+canvas{width:100%;height:100%;display:block}
+#hud{position:absolute;left:10px;right:10px;top:10px;pointer-events:none}
+.row{display:flex;gap:8px;align-items:center}
+.panel{background:#07101dcc;border:1px solid #3a4b70;border-radius:10px;padding:7px 9px;backdrop-filter:blur(5px)}
+.stat{flex:1;min-width:0}
+.small{font-size:11px;color:#aab6d1}
+.big{font-size:16px;font-weight:900}
+.bar{height:7px;background:#202a42;border-radius:9px;overflow:hidden;margin-top:4px}
+.fill{height:100%;width:50%;background:#5be08b;transition:width .2s}
+#battleInfo{margin-top:8px;text-align:center}
+#message{position:absolute;left:50%;bottom:112px;transform:translateX(-50%);width:min(92%,520px);text-align:center;font-weight:800;text-shadow:0 2px 8px #000;pointer-events:none}
+#controls{padding:9px 10px calc(10px + env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;background:#080c17;border-top:1px solid #202a40}
+.ctrl{height:54px;border-radius:13px;background:linear-gradient(#263653,#172239);border:1px solid #40537a;font-weight:900;font-size:14px;box-shadow:0 4px 0 #0b1120}
+.ctrl:active{transform:translateY(2px);box-shadow:0 2px 0 #0b1120}
+.attack{background:linear-gradient(#b9435e,#7e263d);border-color:#dd6980}
+.up{background:linear-gradient(#2f8c71,#1d5d4b)}
+.goldbtn{background:linear-gradient(#a87826,#705018)}
+#overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#050813dd;z-index:5;padding:18px}
+.modal{width:min(94%,520px);max-height:88%;overflow:auto;background:#111a2d;border:1px solid #465a82;border-radius:18px;padding:18px;box-shadow:0 20px 60px #000b}
+.modal h2{margin:0 0 10px}
+.menuGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.menuBtn{padding:13px;border-radius:12px;background:#202d48;border:1px solid #3c4e70;text-align:left}
+.menuBtn b{display:block;margin-bottom:4px}
+.item{padding:10px;border-bottom:1px solid #26334d}
+.close{width:100%;margin-top:12px;padding:12px;border-radius:12px;background:#344565;font-weight:800}
+#toast{position:absolute;top:68px;left:50%;transform:translateX(-50%);background:#f6c94b;color:#17130a;padding:7px 13px;border-radius:20px;font-weight:900;opacity:0;transition:.2s;pointer-events:none;z-index:8}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="logo">⚔ INFINITE RISE</div>
+  <div><span class="gold" id="gold">0 G</span></div>
+</header>
+
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div class="row">
+      <div class="panel stat">
+        <div class="small">PLAYER</div>
+        <div class="big">Lv.<span id="lv">1</span> <span id="name">旅人</span></div>
+        <div class="bar"><div id="hpbar" class="fill"></div></div>
+        <div class="small"><span id="hp">30</span> / <span id="maxhp">30</span> HP</div>
+      </div>
+      <div class="panel stat">
+        <div class="small">POWER</div>
+        <div class="big" id="power">5</div>
+        <div class="small">EXP <span id="exp">0</span>/<span id="next">20</span></div>
+      </div>
+    </div>
+    <div id="battleInfo" class="panel">
+      <div class="small">NEXT ENEMY</div>
+      <div class="big" id="enemyName">スライム</div>
+      <div><span id="enemyHp">20</span> HP　/　ATK <span id="enemyAtk">3</span></div>
+    </div>
+  </div>
+  <div id="message"></div>
+  <div id="toast"></div>
+
+  <div id="overlay">
+    <div class="modal" id="modal"></div>
+  </div>
+</div>
+
+<div id="controls">
+  <button class="ctrl attack" id="attack">⚔ 攻撃</button>
+  <button class="ctrl up" id="skill">✨ スキル</button>
+  <button class="ctrl goldbtn" id="menu">☰ メニュー</button>
+  <button class="ctrl" id="heal">💚 回復</button>
+  <button class="ctrl" id="equip">🗡 装備</button>
+  <button class="ctrl" id="save">💾 セーブ</button>
+</div>
+</div>
+
+<script>
+(() => {
+"use strict";
+const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
+let W=0,H=0,particles=[],last=0,shake=0;
+
+const state={
+ lv:1, exp:0, gold:0, hp:30, maxhp:30, power:5, skill:10,
+ enemy:{name:"スライム",hp:20,maxhp:20,atk:3,level:1,kind:0},
+ kills:0, weapon:0, potions:3, totalDamage:0
+};
+
+const enemies=[
+ ["スライム",20,3],["ゴブリン",42,6],["オーク",90,11],["リザードマン",190,18],
+ ["魔導兵",420,28],["黒騎士",950,45],["ドラゴン",2400,70],["古代竜",7200,105],
+ ["虚空の魔獣",22000,180],["終焉の巨兵",75000,300]
+];
+
+function scaleEnemy(){
+ const tier=Math.min(enemies.length-1,Math.floor(state.kills/3));
+ const base=enemies[tier], cycle=Math.floor(state.kills/30);
+ const mult=Math.pow(10,cycle);
+ const hp=Math.floor(base[1]*mult*(1+(state.kills%3)*.22));
+ const atk=Math.floor(base[2]*mult);
+ state.enemy={name:base[0]+(cycle?"・"+toJPNum(cycle)+"巡目":""),hp,maxhp:hp,atk,level:tier+1+cycle*10,kind:tier};
+}
+
+function toJPNum(n){return n===1?"Ⅱ":n===2?"Ⅲ":n===3?"Ⅳ":n===4?"Ⅴ":String(n+1)}
+function fmt(n){
+ if(n<1000)return Math.floor(n).toLocaleString();
+ const units=["K","M","B","T","Qa","Qi","Sx","Sp","Oc","No"];
+ let i=-1,x=n;
+ while(x>=1000&&i<units.length-1){x/=1000;i++}
+ return (x>=100?x.toFixed(0):x>=10?x.toFixed(1):x.toFixed(2))+units[i];
+}
+function rand(a,b){return Math.random()*(b-a)+a}
+
+function save(){
+ try{localStorage.setItem("infinite-rise-save",JSON.stringify(state)); toast("セーブしました");}
+ catch(e){toast("この環境ではセーブできません")}
+}
+function load(){
+ try{
+  const s=JSON.parse(localStorage.getItem("infinite-rise-save")||"null");
+  if(s) Object.assign(state,s);
+ }catch(e){}
+ scaleEnemy();
+}
+function toast(t){const e=document.getElementById("toast");e.textContent=t;e.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.opacity=0,1200)}
+
+function levelUp(){
+ while(state.exp>=state.lv*20){
+  state.exp-=state.lv*20; state.lv++;
+  state.maxhp=Math.floor(state.maxhp*1.45+8);
+  state.hp=state.maxhp;
+  state.power=Math.floor(state.power*1.55+2);
+  state.skill=Math.floor(state.power*2.2);
+  burst(W/2,H/2,20);
+  toast("LEVEL UP!  Lv."+state.lv);
+ }
+}
+
+function hit(dmg,crit=false){
+ state.enemy.hp-=dmg; state.totalDamage+=dmg;
+ burst(W/2,H*.43,crit?14:7);
+ shake=crit?8:4;
+ if(state.enemy.hp<=0){
+   const reward=Math.floor(state.enemy.maxhp*.65+state.enemy.level*12);
+   state.gold+=reward; state.exp+=Math.max(5,Math.floor(state.enemy.level*8));
+   state.kills++;
+   state.hp=Math.min(state.maxhp,state.hp+Math.floor(state.maxhp*.08));
+   msg((crit?"CRITICAL! ":"")+"撃破！ +"+fmt(reward)+"G");
+   scaleEnemy(); levelUp();
+ }else{
+   setTimeout(enemyAttack,260);
+   msg(crit?"会心の一撃！":"攻撃！");
+ }
+ update();
+}
+
+function attack(){
+ const crit=Math.random()<Math.min(.35,.08+state.lv*.006);
+ let dmg=Math.max(1,Math.floor(state.power*rand(.82,1.18)*(crit?2.5:1)));
+ hit(dmg,crit);
+}
+function skill(){
+ if(state.skill<=0){msg("スキルは準備中です");return}
+ state.skill=0;
+ const dmg=Math.floor(state.power*3.8+state.lv*12);
+ hit(dmg,true); msg("必殺技！ "+fmt(dmg)+" ダメージ！");
+ setTimeout(()=>{state.skill=Math.floor(state.power*2.2);update()},900);
+}
+function enemyAttack(){
+ if(state.enemy.hp<=0)return;
+ const dmg=Math.max(1,Math.floor(state.enemy.atk*rand(.8,1.15)));
+ state.hp-=dmg; shake=5; burst(W/2,H*.7,6);
+ if(state.hp<=0){
+   state.hp=Math.max(1,Math.floor(state.maxhp*.25));
+   state.gold=Math.floor(state.gold*.9);
+   msg("力尽きた…… HPが回復しました");
+ } else msg("敵の攻撃！ -"+fmt(dmg)+" HP");
+ update();
+}
+function heal(){
+ if(state.potions<=0){msg("回復薬がありません");return}
+ if(state.hp>=state.maxhp){msg("HPは満タンです");return}
+ state.potions--;state.hp=Math.min(state.maxhp,state.hp+Math.floor(state.maxhp*.45));
+ msg("回復薬を使用！");
+ update();
+}
+
+function msg(t){document.getElementById("message").textContent=t;clearTimeout(msg.t);msg.t=setTimeout(()=>document.getElementById("message").textContent="",1000)}
+function update(){
+ const q=id=>document.getElementById(id);
+ q("lv").textContent=state.lv;q("name").textContent=state.lv>=30?"超越者":state.lv>=10?"冒険者":"旅人";
+ q("gold").textContent=fmt(state.gold)+" G";q("power").textContent=fmt(state.power);
+ q("hp").textContent=fmt(state.hp);q("maxhp").textContent=fmt(state.maxhp);
+ q("hpbar").style.width=Math.max(0,state.hp/state.maxhp*100)+"%";
+ q("exp").textContent=fmt(state.exp);q("next").textContent=fmt(state.lv*20);
+ q("enemyName").textContent=state.enemy.name;q("enemyHp").textContent=fmt(Math.max(0,state.enemy.hp));
+ q("enemyAtk").textContent=fmt(state.enemy.atk);
+}
+
+function openMenu(){
+ document.getElementById("modal").innerHTML=`
+ <h2>メニュー</h2>
+ <div class="menuGrid">
+  <button class="menuBtn" onclick="showStats()"><b>📊 ステータス</b><span>現在の成長を確認</span></button>
+  <button class="menuBtn" onclick="buy()"><b>🛒 ショップ</b><span>回復薬・強化</span></button>
+  <button class="menuBtn" onclick="showHow()"><b>❓ 遊び方</b><span>インフレの仕組み</span></button>
+  <button class="menuBtn" onclick="save();closeMenu()"><b>💾 セーブ</b><span>端末に保存</span></button>
+ </div>
+ <button class="close" onclick="closeMenu()">閉じる</button>`;
+ document.getElementById("overlay").style.display="flex";
+}
+function closeMenu(){document.getElementById("overlay").style.display="none"}
+function showStats(){
+ document.getElementById("modal").innerHTML=`
+ <h2>ステータス</h2>
+ <div class="item">レベル：<b>${state.lv}</b></div>
+ <div class="item">攻撃力：<b>${fmt(state.power)}</b></div>
+ <div class="item">最大HP：<b>${fmt(state.maxhp)}</b></div>
+ <div class="item">撃破数：<b>${state.kills}</b></div>
+ <div class="item">総ダメージ：<b>${fmt(state.totalDamage)}</b></div>
+ <div class="item">所持金：<b>${fmt(state.gold)} G</b></div>
+ <button class="close" onclick="openMenu()">戻る</button>`;
+}
+function buy(){
+ document.getElementById("modal").innerHTML=`
+ <h2>ショップ</h2>
+ <div class="item">💚 回復薬 ×1　<b>100 G</b><br><button class="menuBtn" style="margin-top:7px;width:100%" onclick="buyPotion()">購入</button></div>
+ <div class="item">⚔ 永続強化　<b>1,000 G</b><br><button class="menuBtn" style="margin-top:7px;width:100%" onclick="buyPower()">攻撃力 +${Math.max(5,Math.floor(state.power*.25))}</button></div>
+ <button class="close" onclick="openMenu()">戻る</button>`;
+}
+function buyPotion(){if(state.gold<100){toast("お金が足りません");return}state.gold-=100;state.potions++;toast("回復薬を購入");buy();update()}
+function buyPower(){if(state.gold<1000){toast("お金が足りません");return}let d=Math.max(5,Math.floor(state.power*.25));state.gold-=1000;state.power+=d;state.skill=Math.floor(state.power*2.2);toast("攻撃力が上がった！");buy();update()}
+function showHow(){
+ document.getElementById("modal").innerHTML=`
+ <h2>遊び方</h2>
+ <div class="item">⚔ 攻撃：通常攻撃。たまに会心。</div>
+ <div class="item">✨ スキル：大ダメージ。少し待つと再使用可能。</div>
+ <div class="item">💚 回復：回復薬を1個消費。</div>
+ <div class="item">🗡 装備：現在の強化値を確認。</div>
+ <div class="item">敵を倒すほど敵も強くなります。一定周期で数字が一気に跳ね上がる、いわゆる<strong>インフレRPG</strong>です。</div>
+ <button class="close" onclick="openMenu()">戻る</button>`;
+}
+function equip(){
+ document.getElementById("modal").innerHTML=`
+ <h2>装備</h2><div class="item">🗡 現在の武器：<b>成長する剣</b></div>
+ <div class="item">攻撃力：<b>${fmt(state.power)}</b></div>
+ <div class="item">武器レベル：<b>${state.lv}</b></div>
+ <button class="close" onclick="closeMenu()">閉じる</button>`;
+ document.getElementById("overlay").style.display="flex";
+}
+
+function burst(x,y,n){
+ for(let i=0;i<n;i++)particles.push({x,y,vx:rand(-2.8,2.8),vy:rand(-3.5,1),life:1,r:rand(2,5)});
+}
+function resize(){
+ const d=Math.min(devicePixelRatio||1,2),r=canvas.getBoundingClientRect();
+ W=Math.max(1,r.width);H=Math.max(1,r.height);canvas.width=W*d;canvas.height=H*d;ctx.setTransform(d,0,0,d,0,0);
+}
+function draw(t){
+ requestAnimationFrame(draw);
+ const dt=Math.min(.033,(t-last)/1000||.016);last=t;
+ ctx.clearRect(0,0,W,H);
+ const s=shake>0?(Math.random()-.5)*shake:0;shake*=.86;
+ ctx.save();ctx.translate(s,0);
+ // background
+ let g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,"#182544");g.addColorStop(1,"#070b16");ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ // stars
+ for(let i=0;i<35;i++){let x=(i*83+37)%W,y=(i*47+22)%(H*.7);ctx.globalAlpha=.25+.25*Math.sin(t/900+i);ctx.fillStyle="#dce7ff";ctx.fillRect(x,y,1.5,1.5)}ctx.globalAlpha=1;
+ // floor
+ ctx.fillStyle="#0e1626";ctx.beginPath();ctx.ellipse(W/2,H*.72,W*.38,H*.08,0,0,Math.PI*2);ctx.fill();
+ // enemy
+ const scale=Math.min(1.15,W/360), cx=W/2, cy=H*.43;
+ ctx.save();ctx.translate(cx,cy);
+ let pulse=1+Math.sin(t/180)*.025;
+ ctx.scale(scale*pulse,scale*pulse);
+ const kind=state.enemy.kind;
+ ctx.fillStyle=kind<=1?"#65d66e":kind<=3?"#a45fce":kind<=5?"#d66b62":"#d4a74b";
+ ctx.beginPath();
+ if(kind===0){ctx.arc(0,5,42,0,Math.PI*2)}
+ else {ctx.roundRect(-42,-38,84,76,18)}
+ ctx.fill();
+ ctx.fillStyle="#121827";ctx.beginPath();ctx.arc(-14,-3,5,0,7);ctx.arc(14,-3,5,0,7);ctx.fill();
+ ctx.strokeStyle="#121827";ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,8,15,0,Math.PI);ctx.stroke();
+ if(kind>=3){ctx.fillStyle="#eee";ctx.beginPath();ctx.moveTo(-28,-36);ctx.lineTo(-14,-55);ctx.lineTo(-6,-36);ctx.moveTo(28,-36);ctx.lineTo(14,-55);ctx.lineTo(6,-36);ctx.fill()}
+ ctx.restore();
+ // hp bar
+ const bw=Math.min(300,W*.65),bh=10,bx=W/2-bw/2,by=H*.58;
+ ctx.fillStyle="#1d2940";ctx.roundRect(bx,by,bw,bh,5);ctx.fill();
+ ctx.fillStyle="#e45162";ctx.roundRect(bx,by,bw*Math.max(0,state.enemy.hp/state.enemy.maxhp),bh,5);ctx.fill();
+ // particles
+ particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=3*dt;p.life-=dt*1.8;ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle="#ffd45a";ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill()});
+ ctx.globalAlpha=1;particles=particles.filter(p=>p.life>0);
+ ctx.restore();
+}
+window.addEventListener("resize",resize);
+document.getElementById("attack").onclick=attack;
+document.getElementById("skill").onclick=skill;
+document.getElementById("heal").onclick=heal;
+document.getElementById("menu").onclick=openMenu;
+document.getElementById("equip").onclick=equip;
+document.getElementById("save").onclick=save;
+document.getElementById("overlay").addEventListener("click",e=>{if(e.target.id==="overlay")closeMenu()});
+window.showStats=showStats;window.buy=buy;window.buyPotion=buyPotion;window.buyPower=buyPower;window.showHow=showHow;window.openMenu=openMenu;window.closeMenu=closeMenu;
+
+load();resize();update();requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
